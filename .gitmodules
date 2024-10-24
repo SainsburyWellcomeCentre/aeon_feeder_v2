@@ -1,0 +1,7 @@
+[submodule "microharp"]
+	path = microharp
+	url = https://github.com/SainsburyWellcomeCentre/microharp.git
+	branch = v2.0
+[submodule "NeuroPico"]
+	path = NeuroPico
+	url = https://github.com/SainsburyWellcomeCentre/NeuroPico
