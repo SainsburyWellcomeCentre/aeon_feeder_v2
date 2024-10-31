@@ -1,33 +1,46 @@
 from micropython import const
 import uasyncio
+
 from microharp.device import HarpDevice
 from microharp.type import HarpTypes
-from microharp.register import ReadWriteReg, ReadOnlyReg, OperationalCtrlReg
-from registers import RangeReg
-import time
-from microharp.event import PeriodicEvent
+from microharp.register import ReadWriteReg, ReadOnlyReg
+from microharp.event import PeriodicEvent, LooseEvent
+
+from neuroPico.motor import Motor
+from neuroPico.driver.as5600 import AS5600
+from neuroPico.port import AnalogPort
+from neuroPico.utilty.debounce import DebouncedInput
+
+from register import PelletSendReg, WheelAngleReg
 
 
 class MyDevice(HarpDevice):
     """My Harp device."""
 
     R_PEL_SND = const(33)
-    R_PEL_COUNT = const(34)
-    R_BBK_VAL = const(35)
-    R_BBK_THLD = const(36)
     R_BBK_DET = const(37)
-    R_BBK_GAIN = const(38)
-    R_WHEEL_COUNT = const(39)
-    R_WHEEL_ANG = const(40)
-    R_WHEEL_THLD = const(41)
-    R_AUTO_EN = const(42)
+    R_WHEEL_ANG = const(90)
 
-    def __init__(self, led, tof, monitor=None):
+    def __init__(
+        self,
+        led,
+        clock,
+        motor: Motor,
+        sensor: AS5600,
+        beambreak: AnalogPort,
+        btn: DebouncedInput,
+        threshold,
+        monitor=None,
+    ):
         """Constructor.
 
         Connects the logical device to its physical interfaces, creates the register map.
         """
-        super().__init__(led, monitor=monitor)
+        super().__init__(led, clock, monitor=monitor)
+        self.beambreak = beambreak
+        self.motor = motor
+        self.btn = btn
+        self.threshold = threshold
         registers = {
             HarpDevice.R_DEVICE_NAME: ReadWriteReg(HarpTypes.U8, tuple(b"My Feeder")),
             HarpDevice.R_WHO_AM_I: ReadOnlyReg(HarpTypes.U16, (1233,)),
@@ -35,25 +48,40 @@ class MyDevice(HarpDevice):
             # HarpDevice.R_HW_VERSION_L: ReadOnlyReg(HarpTypes.U8, (0,)),
             # HarpDevice.R_FW_VERSION_H: ReadOnlyReg(HarpTypes.U8, (1,)),
             # HarpDevice.R_FW_VERSION_L: ReadOnlyReg(HarpTypes.U8, (0,)),
-            self.R_PEL_SND: RangeReg(tof),
-            self.R_PEL_COUNT : RangeReg(tof),
-            self.R_BBK_VAL : RangeReg(tof),
-            self.R_BBK_THLD : RangeReg(tof),
-            self.R_BBK_DET : RangeReg(tof),
-            self.R_BBK_GAIN : RangeReg(tof),
-            self.R_WHEEL_COUNT : RangeReg(tof),
-            self.R_WHEEL_ANG : RangeReg(tof),
-            self.R_WHEEL_THLD : RangeReg(tof),
-            self.R_AUTO_EN : RangeReg(tof)
+            self.R_PEL_SND: PelletSendReg(motor),
+            self.R_BBK_DET: ReadOnlyReg(HarpTypes.U8, (1,)),
+            self.R_WHEEL_ANG: WheelAngleReg(sensor),
         }
         self.registers.update(registers)
 
-        # self.readRangeEvent = PeriodicEvent(
-        #     MyDevice.Range_VAL,
-        #     self.registers[MyDevice.Range_VAL],
-        #     self.sync,
-        #     self.txMessages,
-        #     30,
-        # )
+        self.readAngleEvent = PeriodicEvent(
+            self.R_WHEEL_ANG,
+            self.registers[self.R_WHEEL_ANG],
+            self.clock,
+            self.txMessages,
+            10,
+        )
 
-        # self.events.append(self.readRangeEvent)
+        self.beambreakEvent = LooseEvent(
+            self.R_BBK_DET,
+            self.registers[self.R_BBK_DET].typ, 
+            self.rxMessages)
+
+        self.events.append(self.readAngleEvent)
+        self.events.append(self.beambreakEvent)
+        
+        self.tasks.append(self._beambreak_task())
+
+        self.btn.callback = self.button_callback
+
+    async def _beambreak_task(self):
+        while True:
+            if self.beambreak.value() < self.threshold:
+                self.motor.setSpeed(0)
+                self.beambreakEvent.callback()
+                await uasyncio.sleep(0.1)
+            await uasyncio.sleep(0.05)
+
+    def button_callback(self, pin=-1):
+        reg = self.registers[self.R_PEL_SND]
+        reg.write(reg.typ, (1,0))
