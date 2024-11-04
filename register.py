@@ -10,6 +10,7 @@ class PelletSendReg(ReadWriteReg):
     def __init__(self, motor: Motor):
         super().__init__(HarpTypes.U8)
         self._motor = motor
+        self.value = (1,)
 
     def read(self, typ):
         super().read(typ)
@@ -25,9 +26,9 @@ class WheelAngleReg(ReadOnlyReg):
     """Read/write register with debug print."""
 
     def __init__(self, snsr: AS5600):
-        super().__init__(HarpTypes.FLOAT)
+        super().__init__(HarpTypes.U16)
         self._snsr = snsr
 
     def read(self, typ):
-        self.value = (self._snsr.readAngle(),)
+        self.value = (round(self._snsr.readAngle()),)
         return super().read(typ)

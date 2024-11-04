@@ -6,7 +6,7 @@ from neuroPico.port import Port
 from micropython import const
 from beambreak import beambreak_calibration
 
-BBK_TH = const(53_000)
+BBK_TH = const(54_500)
 
 
 myController = NeuroPico()
