@@ -2,3 +2,6 @@
 	path = microharp
 	url = https://github.com/SainsburyWellcomeCentre/microharp.git
 	branch = v2.0
+[submodule "neuroPico"]
+	path = neuroPico
+	url = https://github.com/SainsburyWellcomeCentre/neuroPico.git
