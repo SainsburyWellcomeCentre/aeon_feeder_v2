@@ -17,10 +17,10 @@ from register import PelletSendReg, WheelAngleReg
 class MyDevice(HarpDevice):
     """My Harp device."""
 
-    R_PEL_SND = const(33)
-    R_BBK_DET = const(37)
-    R_BBK_RAW = const(44)
+    R_BBK_DET = const(32)
+    R_PEL_SND = const(36)
     R_WHEEL_ANG = const(90)
+    R_DUMMY = const(35)
 
     def __init__(
         self,
@@ -50,9 +50,9 @@ class MyDevice(HarpDevice):
             HarpDevice.R_HW_VERSION_L: ReadOnlyReg(HarpTypes.U8, (0,)),
             HarpDevice.R_FW_VERSION_H: ReadOnlyReg(HarpTypes.U8, (1,)),
             HarpDevice.R_FW_VERSION_L: ReadOnlyReg(HarpTypes.U8, (0,)),
-            self.R_PEL_SND: PelletSendReg(motor),
-            self.R_BBK_DET: ReadOnlyReg(HarpTypes.U8, (1,)),
-            self.R_BBK_RAW: ReadWriteReg(HarpTypes.U16, (0,)),
+            self.R_PEL_SND: PelletSendReg(HarpTypes.U16),
+            self.R_DUMMY: ReadWriteReg(HarpTypes.U16, (0,)),
+            self.R_BBK_DET: ReadOnlyReg(HarpTypes.U8, (0,)),
             self.R_WHEEL_ANG: WheelAngleReg(sensor),
         }
         self.registers.update(registers)
@@ -75,16 +75,43 @@ class MyDevice(HarpDevice):
         self.btn.callback = self.button_callback
 
     async def _beambreak_task(self):
-        reg = self.registers[self.R_BBK_RAW]
+        reg = self.registers[self.R_PEL_SND]
         while True:
-            adc = self.beambreak.value()
-            reg.write(reg.typ, (adc,))
-            if adc < self.threshold:
-                self.motor.setSpeed(0)
-                self.beambreakEvent.callback()
-                await uasyncio.sleep(0.1)
-            await uasyncio.sleep(0.05)
+            val = reg.read(reg.typ)
+            isTrigger = val[0] > 0
+
+            if isTrigger:
+                await self.deliver_operation()
+                reg.value = (0,)
+            else:
+                await uasyncio.sleep(0.002)
 
     def button_callback(self, pin=-1):
         reg = self.registers[self.R_PEL_SND]
-        reg.write(reg.typ, (1,))
+        reg.value = (1,)
+
+    async def deliver_operation(self):
+        reg = self.registers[self.R_BBK_DET]
+        speed = 50000
+        while True:
+            self.motor.setSpeed(speed)
+
+            print(self.beambreak.value(), end="\t")
+            print(speed, end="\t")
+            print(self.threshold, end="\t\n")
+            isDetected = self.beambreak.value() > self.threshold
+            if isDetected:
+                self.motor.setSpeed(0)
+                break
+
+            if speed > 9000:
+                speed = round(0.9 * speed)
+            else:
+                speed = 9000
+            await uasyncio.sleep(0.002)
+
+        reg.value = (255,)
+        self.beambreakEvent.callback()
+        await uasyncio.sleep(0.01)
+        reg.value = (0,)
+        self.beambreakEvent.callback()

@@ -7,19 +7,8 @@ from neuroPico.driver.as5600 import AS5600
 class PelletSendReg(ReadWriteReg):
     """Read/write register with debug print."""
 
-    def __init__(self, motor: Motor):
-        super().__init__(HarpTypes.U8)
-        self._motor = motor
-        self.value = (1,)
-
-    def read(self, typ):
-        super().read(typ)
-        return self.value
-
     def write(self, typ, value):
-        super().write(typ, value)
-        if value[0]:
-            self._motor.setSpeed(6500)
+        self.value = (1, 0)
 
 
 class WheelAngleReg(ReadOnlyReg):
