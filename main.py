@@ -3,7 +3,7 @@ from device import MyDevice
 from neuroPico.neuropico import NeuroPico
 from neuroPico.driver.as5600 import AS5600
 from neuroPico.port import Port
-from beambreak import beambreak_calibration
+from calibration import beambreak_calibration
 
 myController = NeuroPico()
 

@@ -3,24 +3,22 @@ import time
 
 
 def beambreak_calibration(beambreak: AnalogPort):
-    MAX_DUTY = 50000
-    MIN_DUTY = 10000
 
-    gain = 1
-    while gain < 3:
-        beambreak.setPWM(MIN_DUTY)
-        gain = MAX_DUTY / beambreak_avg(beambreak) / 2
-        time.sleep_ms(100)
-    beambreak.setGain(gain)
+    MAX_DUTY = 57500
+    MIN_DUTY = 24000
     pwm = 0
-    for duty in range(MIN_DUTY, MAX_DUTY, 100):
+    beambreak.setGain(1)
+    beambreak.setPWM(0)
+    for duty in range(MIN_DUTY, MAX_DUTY, 250):
         beambreak.setPWM(duty)
-        time.sleep_ms(10)
-        if beambreak.value() > MAX_DUTY:
+        time.sleep_ms(1)
+        if beambreak.value() > MIN_DUTY:
             pwm = duty
             break
+    gain = MAX_DUTY / beambreak_avg(beambreak)
+    beambreak.setGain(gain)
 
-    threshold = beambreak_avg(beambreak) + 4000
+    threshold = round(beambreak_avg(beambreak) * 1.04)
 
     return threshold, gain, pwm
 
