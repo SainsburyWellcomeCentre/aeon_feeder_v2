@@ -18,6 +18,7 @@ class MyDevice(HarpDevice):
     """My Harp device."""
 
     R_BBK_DET = const(32)
+    R_DUMMY = const(35)
     R_PEL_SND = const(36)
     R_WHEEL_ANG = const(90)
 
@@ -51,6 +52,7 @@ class MyDevice(HarpDevice):
             HarpDevice.R_FW_VERSION_L: ReadOnlyReg(HarpTypes.U8, (0,)),
             self.R_PEL_SND: PelletSendReg(HarpTypes.U16),
             self.R_BBK_DET: ReadOnlyReg(HarpTypes.U8, (0,)),
+            self.R_DUMMY: ReadWriteReg(HarpTypes.U16, (0,)),
             self.R_WHEEL_ANG: WheelAngleReg(sensor),
         }
         self.registers.update(registers)
