@@ -3,7 +3,7 @@ import uasyncio
 
 from microharp.device import HarpDevice
 from microharp.type import HarpTypes
-from microharp.register import HarpRegister, ReadWriteReg, ReadOnlyReg
+from microharp.register import ReadWriteReg, ReadOnlyReg
 from microharp.event import PeriodicEvent, LooseEvent
 
 from neuroPico.motor import Motor
@@ -11,7 +11,7 @@ from neuroPico.driver.as5600 import AS5600
 from neuroPico.port import AnalogPort
 from neuroPico.utilty.debounce import DebouncedInput
 
-from register import PelletSendReg, WheelAngleReg
+from register import PelletSendReg
 
 
 class MyDevice(HarpDevice):
@@ -37,7 +37,7 @@ class MyDevice(HarpDevice):
 
         Connects the logical device to its physical interfaces, creates the register map.
         """
-        super().__init__(led, clock, monitor=monitor)
+        super().__init__(led, clock, monitor=monitor, txqlen=100)
         self.beambreak = beambreak
         self.motor = motor
         self.btn = btn
@@ -53,7 +53,7 @@ class MyDevice(HarpDevice):
             self.R_PEL_SND: PelletSendReg(HarpTypes.U16),
             self.R_BBK_DET: ReadOnlyReg(HarpTypes.U8, (0,)),
             self.R_DUMMY: ReadWriteReg(HarpTypes.U16, (0,)),
-            self.R_WHEEL_ENCO: WheelAngleReg(encoder),
+            self.R_WHEEL_ENCO: ReadOnlyReg(HarpTypes.U16, (0, 0)),
         }
         self.registers.update(registers)
 
@@ -65,37 +65,31 @@ class MyDevice(HarpDevice):
             10,
         )
 
-        self.beambreakFlag = False
-
         self.beambreakEvent = LooseEvent(self.R_BBK_DET, self.registers[self.R_BBK_DET], self.clock, self.txMessages)
 
         self.events.append(self.readAngleEvent)
         self.events.append(self.beambreakEvent)
 
-        self.tasks.append(self._beambreak_task())
+        self.tasks.append(self._encoder_task())
         self.tasks.append(self._pellet_task())
 
         self.btn.callback = self.button_callback
 
-    async def _beambreak_task(self):
-        lastStatus = False
-        reg = self.registers[self.R_BBK_DET]
+        self.beambreakDuty = self.beambreak.duty
+        self.beambreak.setPWM(0)
+
+    def button_callback(self, pin=-1):
+        reg = self.registers[self.R_PEL_SND]
+        reg.value = (1,)
+
+    async def _encoder_task(self):
+        reg = self.registers[self.R_WHEEL_ENCO]
         while True:
-            val = self.beambreak.value()
-            isTriggerd = val > self.threshold
-            self.beambreakFlag = isTriggerd
-            if isTriggerd:
-                self.motor.setSpeed(0)
-
-            if lastStatus != isTriggerd:
-                val = 255 if isTriggerd else 0
-                reg.value = (val,)
-                self.beambreakEvent.callback()
-                await uasyncio.sleep(0.05)
-
-            lastStatus = isTriggerd
-
-            await uasyncio.sleep(0.001)
+            reg.value = (
+                self.encoder.read_angle_raw() * 16,
+                self.encoder.read_mag() * 16,
+            )
+            await uasyncio.sleep(0)
 
     async def _pellet_task(self):
         reg = self.registers[self.R_PEL_SND]
@@ -105,23 +99,40 @@ class MyDevice(HarpDevice):
 
             if isTrigger:
                 await self.deliver_operation()
+                await self.beambreak_callback(255)
+                await self.wheel_check()
+                await uasyncio.sleep(0.02)
+                await self.beambreak_callback(0)
                 reg.value = (0,)
             else:
                 await uasyncio.sleep(0.002)
 
-    def button_callback(self, pin=-1):
-        reg = self.registers[self.R_PEL_SND]
-        reg.value = (1,)
+    async def wheel_check(self):
+        reg = self.registers[self.R_WHEEL_ENCO]
+        init_pos = reg.value[0]
+        max_val = 65536
+        threshold = 916  # 65535 in angle / 40 slot
+        if init_pos > (max_val - threshold):
+            init_pos -= max_val
+        while (reg.value[0] - init_pos) < threshold:
+            await uasyncio.sleep(0.02)
+
+    async def beambreak_callback(self, val):
+        reg = self.registers[self.R_BBK_DET]
+        reg.value = (val,)
+        self.beambreakEvent.callback()
 
     async def deliver_operation(self):
-        maxSpeed = 30000
-        scale = 3000
+        maxSpeed = 20000
+        scale = 50
         minSpeed = 6000
         speed = maxSpeed
+        self.beambreak.setPWM(self.beambreakDuty)
+        await uasyncio.sleep(0.001)
         while True:
-
-            if self.beambreakFlag:
+            if self.beambreak.value() > self.threshold:
                 self.motor.setSpeed(0)
+                self.beambreak.setPWM(0)
                 break
             else:
                 self.motor.setSpeed(speed)
@@ -131,4 +142,4 @@ class MyDevice(HarpDevice):
             else:
                 speed = maxSpeed
 
-            await uasyncio.sleep(0.01)
+            await uasyncio.sleep(0.001)
