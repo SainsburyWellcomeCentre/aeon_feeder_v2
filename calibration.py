@@ -5,7 +5,7 @@ import time
 def beambreak_calibration(beambreak: AnalogPort):
 
     MAX_DUTY = 57500
-    MIN_DUTY = 24000
+    MIN_DUTY = 27000
     pwm = 0
     beambreak.setGain(1)
     beambreak.setPWM(0)

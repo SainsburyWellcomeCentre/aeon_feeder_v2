@@ -20,14 +20,14 @@ class MyDevice(HarpDevice):
     R_BBK_DET = const(32)
     R_DUMMY = const(35)
     R_PEL_SND = const(36)
-    R_WHEEL_ANG = const(90)
+    R_WHEEL_ENCO = const(90)
 
     def __init__(
         self,
         led,
         clock,
         motor: Motor,
-        sensor: AS5600,
+        encoder: AS5600,
         beambreak: AnalogPort,
         btn: DebouncedInput,
         threshold,
@@ -41,7 +41,7 @@ class MyDevice(HarpDevice):
         self.beambreak = beambreak
         self.motor = motor
         self.btn = btn
-        self.sensor = sensor
+        self.encoder = encoder
         self.threshold = threshold
         registers = {
             HarpDevice.R_DEVICE_NAME: ReadWriteReg(HarpTypes.U8, tuple(b"Feeder V2")),
@@ -53,13 +53,13 @@ class MyDevice(HarpDevice):
             self.R_PEL_SND: PelletSendReg(HarpTypes.U16),
             self.R_BBK_DET: ReadOnlyReg(HarpTypes.U8, (0,)),
             self.R_DUMMY: ReadWriteReg(HarpTypes.U16, (0,)),
-            self.R_WHEEL_ANG: WheelAngleReg(sensor),
+            self.R_WHEEL_ENCO: WheelAngleReg(encoder),
         }
         self.registers.update(registers)
 
         self.readAngleEvent = PeriodicEvent(
-            self.R_WHEEL_ANG,
-            self.registers[self.R_WHEEL_ANG],
+            self.R_WHEEL_ENCO,
+            self.registers[self.R_WHEEL_ENCO],
             self.clock,
             self.txMessages,
             10,
@@ -114,9 +114,9 @@ class MyDevice(HarpDevice):
         reg.value = (1,)
 
     async def deliver_operation(self):
-        maxSpeed = 10000
-        scale = 500
-        minSpeed = 3000
+        maxSpeed = 30000
+        scale = 3000
+        minSpeed = 6000
         speed = maxSpeed
         while True:
 

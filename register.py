@@ -15,7 +15,7 @@ class WheelAngleReg(ReadOnlyReg):
     """Read/write register with debug print."""
 
     def __init__(self, snsr: AS5600):
-        super().__init__(HarpTypes.U16, (0,0))
+        super().__init__(HarpTypes.U16, (0, 0))
         self._snsr = snsr
 
     def read(self, typ):
