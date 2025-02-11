@@ -86,8 +86,8 @@ class MyDevice(HarpDevice):
         reg = self.registers[self.R_WHEEL_ENCO]
         while True:
             reg.value = (
-                self.encoder.read_angle_raw() * 16,
-                self.encoder.read_mag() * 16,
+                self.encoder.read_angle_raw() << 2,
+                self.encoder.read_mag() << 2,
             )
             await uasyncio.sleep(0)
 
@@ -112,9 +112,10 @@ class MyDevice(HarpDevice):
         init_pos = reg.value[0]
         max_val = 65536
         threshold = 916  # 65535 in angle / 40 slot
-        if init_pos > (max_val - threshold):
-            init_pos -= max_val
-        while (reg.value[0] - init_pos) < threshold:
+        diff = 0
+        while diff < threshold:
+            pos = reg.value[0]
+            diff = (pos - init_pos) if (pos >= init_pos) else (pos + init_pos - max_val)
             await uasyncio.sleep(0.02)
 
     async def beambreak_callback(self, val):
@@ -123,7 +124,7 @@ class MyDevice(HarpDevice):
         self.beambreakEvent.callback()
 
     async def deliver_operation(self):
-        maxSpeed = 20000
+        maxSpeed = 30000
         scale = 50
         minSpeed = 6000
         speed = maxSpeed
