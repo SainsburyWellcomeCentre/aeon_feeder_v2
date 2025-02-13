@@ -6,6 +6,7 @@ from neuroPico.port import Port
 from calibration import beambreak_calibration
 
 myController = NeuroPico()
+myController.setClockSource(NeuroPico.EXT_CLOCK)
 
 myled = myController.LED
 myled.setColour((0, 30, 0))
@@ -15,7 +16,6 @@ myMotor.setVoltage(24)
 myMotor.setFrequency(25_000)
 myMotor.enable()
 
-myController.CLK_nEN.value(0)
 myCLK = myController.CLK_IN
 
 mySensor = AS5600(myController.I2C)
