@@ -98,11 +98,10 @@ class MyDevice(HarpDevice):
             isTrigger = val[0] > 0
 
             if isTrigger:
-                await self.deliver_operation()
-                await self.beambreak_callback(255)
-                await self.wheel_check()
-                await uasyncio.sleep(0.02)
-                await self.beambreak_callback(0)
+                if await self.deliver_operation():
+                    await self.beambreak_callback(255)
+                    await self.wheel_check()
+                    await self.beambreak_callback(0)
                 reg.value = (0,)
             else:
                 await uasyncio.sleep(0.002)
@@ -110,12 +109,12 @@ class MyDevice(HarpDevice):
     async def wheel_check(self):
         reg = self.registers[self.R_WHEEL_ENCO]
         init_pos = reg.value[0]
-        max_val = 65536
-        threshold = 916  # 65535 in angle / 40 slot
+        max_val = 16383
+        threshold = 410  # 65535 in angle / 40 slot
         diff = 0
         while diff < threshold:
             pos = reg.value[0]
-            diff = (pos - init_pos) if (pos >= init_pos) else (pos + init_pos - max_val)
+            diff = (pos - init_pos) if (pos >= init_pos) else (max_val - init_pos + pos)
             await uasyncio.sleep(0.02)
 
     async def beambreak_callback(self, val):
@@ -124,17 +123,23 @@ class MyDevice(HarpDevice):
         self.beambreakEvent.callback()
 
     async def deliver_operation(self):
-        maxSpeed = 30000
+        maxSpeed = 28000
         scale = 50
-        minSpeed = 6000
+        minSpeed = 28000
         speed = maxSpeed
+        timeout = 0
         self.beambreak.setPWM(self.beambreakDuty)
         await uasyncio.sleep(0.001)
-        while True:
+        while timeout < 65535:
             if self.beambreak.value() > self.threshold:
-                self.motor.setSpeed(0)
+                while self.beambreak.value() > self.threshold:
+                    self.motor.setSpeed(6000)
+                    await uasyncio.sleep(0.001)
                 self.beambreak.setPWM(0)
-                break
+                self.motor.setSpeed(10000)
+                await uasyncio.sleep(0.1)
+                self.motor.setSpeed(0)
+                return True
             else:
                 self.motor.setSpeed(speed)
 
@@ -142,5 +147,7 @@ class MyDevice(HarpDevice):
                 speed -= scale
             else:
                 speed = maxSpeed
+                timeout += 1
 
             await uasyncio.sleep(0.001)
+        return False
